@@ -322,7 +322,7 @@ st.divider()
 
 tab1, tab2, tab3 = st.tabs(["📷 Image URL", "📁 Upload File", "🎥 Camera"])
 
-def check_product(image_url=None, image_base64=None):
+def check_product(image_url=None, image_base64=None, custom_question=None):
     try:
         if image_base64:
             image_content = {
@@ -337,14 +337,15 @@ def check_product(image_url=None, image_base64=None):
                 "image_url": {"url": image_url}
             }
         
-        with st.spinner("Analyzing product image..."):
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": """Analyze this product image and provide a clear authenticity assessment. 
+        # If custom question is provided, use it; otherwise use default authenticity check
+        if custom_question and custom_question.strip():
+            prompt_text = f"""You are analyzing a product image. Please answer the following question about this image:
+
+Question: {custom_question}
+
+Please provide a detailed, helpful answer based on what you can observe in the image. Be specific and reference visual details you can see."""
+        else:
+            prompt_text = """Analyze this product image and provide a clear authenticity assessment. 
 
 Please provide your response in the following structured format:
 
@@ -365,7 +366,16 @@ Please provide your response in the following structured format:
 **RECOMMENDATIONS**:
 [Provide actionable advice based on your assessment]
 
-Be specific, detailed, and focus on visual evidence you can observe in the image. If you cannot determine authenticity with confidence, clearly state what additional information or images would be helpful."""},
+Be specific, detailed, and focus on visual evidence you can observe in the image. If you cannot determine authenticity with confidence, clearly state what additional information or images would be helpful."""
+        
+        with st.spinner("Analyzing product image..."):
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt_text},
                             image_content
                         ]
                     }
@@ -386,26 +396,35 @@ with tab1:
     st.header("Enter Image URL")
     image_url = st.text_input("Image URL", placeholder="https://example.com/image.jpg")
     
+    # Optional custom question
+    custom_question = st.text_input(
+        "💬 Ask a question about the product (optional)", 
+        placeholder="e.g., Is this an Apple iPhone? What brand is this? Is this authentic?",
+        key="question_url"
+    )
+    
     if image_url:
         try:
             st.image(image_url, caption="Preview", use_container_width=True)
-            if st.button("Check Product", type="primary", use_container_width=True):
-                result = check_product(image_url=image_url)
+            if st.button("Check Product", type="primary", use_container_width=True, key="check_url_button"):
+                result = check_product(image_url=image_url, custom_question=custom_question)
                 if result:
-                    result_lower = result.lower()
-                    if result_lower.startswith("**verdict**: fake") or result_lower.startswith("verdict: fake"):
-                        st.error("⚠️ **VERDICT: FAKE**")
-                    elif result_lower.startswith("**verdict**: real") or result_lower.startswith("verdict: real"):
-                        st.success("✅ **VERDICT: REAL**")
-                    elif "uncertain" in result_lower[:200]:
-                        st.warning("⚠️ **VERDICT: UNCERTAIN**")
-                    else:
-                        # Fallback for old format
-                        is_fake = "fake" in result_lower[:200]
-                        if is_fake:
-                            st.error("⚠️ Likely Fake")
+                    # Only show verdict badges if it's an authenticity check (no custom question)
+                    if not custom_question or not custom_question.strip():
+                        result_lower = result.lower()
+                        if result_lower.startswith("**verdict**: fake") or result_lower.startswith("verdict: fake"):
+                            st.error("⚠️ **VERDICT: FAKE**")
+                        elif result_lower.startswith("**verdict**: real") or result_lower.startswith("verdict: real"):
+                            st.success("✅ **VERDICT: REAL**")
+                        elif "uncertain" in result_lower[:200]:
+                            st.warning("⚠️ **VERDICT: UNCERTAIN**")
                         else:
-                            st.success("✅ Likely Real")
+                            # Fallback for old format
+                            is_fake = "fake" in result_lower[:200]
+                            if is_fake:
+                                st.error("⚠️ Likely Fake")
+                            else:
+                                st.success("✅ Likely Real")
                     st.markdown("---")
                     st.markdown(result)
         except Exception as e:
@@ -415,29 +434,38 @@ with tab2:
     st.header("Upload Image File")
     uploaded_file = st.file_uploader("Choose an image file", type=["jpg", "jpeg", "png", "webp"])
     
+    # Optional custom question
+    custom_question = st.text_input(
+        "💬 Ask a question about the product (optional)", 
+        placeholder="e.g., Is this an Apple iPhone? What brand is this? Is this authentic?",
+        key="question_upload"
+    )
+    
     if uploaded_file is not None:
         try:
             image = Image.open(uploaded_file)
             st.image(image, caption="Preview", use_container_width=True)
             
-            if st.button("Check Product", type="primary", use_container_width=True):
+            if st.button("Check Product", type="primary", use_container_width=True, key="check_upload_button"):
                 image_base64 = image_to_base64(image)
-                result = check_product(image_base64=image_base64)
+                result = check_product(image_base64=image_base64, custom_question=custom_question)
                 if result:
-                    result_lower = result.lower()
-                    if result_lower.startswith("**verdict**: fake") or result_lower.startswith("verdict: fake"):
-                        st.error("⚠️ **VERDICT: FAKE**")
-                    elif result_lower.startswith("**verdict**: real") or result_lower.startswith("verdict: real"):
-                        st.success("✅ **VERDICT: REAL**")
-                    elif "uncertain" in result_lower[:200]:
-                        st.warning("⚠️ **VERDICT: UNCERTAIN**")
-                    else:
-                        # Fallback for old format
-                        is_fake = "fake" in result_lower[:200]
-                        if is_fake:
-                            st.error("⚠️ Likely Fake")
+                    # Only show verdict badges if it's an authenticity check (no custom question)
+                    if not custom_question or not custom_question.strip():
+                        result_lower = result.lower()
+                        if result_lower.startswith("**verdict**: fake") or result_lower.startswith("verdict: fake"):
+                            st.error("⚠️ **VERDICT: FAKE**")
+                        elif result_lower.startswith("**verdict**: real") or result_lower.startswith("verdict: real"):
+                            st.success("✅ **VERDICT: REAL**")
+                        elif "uncertain" in result_lower[:200]:
+                            st.warning("⚠️ **VERDICT: UNCERTAIN**")
                         else:
-                            st.success("✅ Likely Real")
+                            # Fallback for old format
+                            is_fake = "fake" in result_lower[:200]
+                            if is_fake:
+                                st.error("⚠️ Likely Fake")
+                            else:
+                                st.success("✅ Likely Real")
                     st.markdown("---")
                     st.markdown(result)
         except Exception as e:
@@ -447,29 +475,38 @@ with tab3:
     st.header("Capture from Camera")
     camera_input = st.camera_input("Take a photo")
     
+    # Optional custom question
+    custom_question = st.text_input(
+        "💬 Ask a question about the product (optional)", 
+        placeholder="e.g., Is this an Apple iPhone? What brand is this? Is this authentic?",
+        key="question_camera"
+    )
+    
     if camera_input is not None:
         try:
             image = Image.open(camera_input)
             st.image(image, caption="Captured Image", use_container_width=True)
             
-            if st.button("Check Product", type="primary", use_container_width=True):
+            if st.button("Check Product", type="primary", use_container_width=True, key="check_camera_button"):
                 image_base64 = image_to_base64(image)
-                result = check_product(image_base64=image_base64)
+                result = check_product(image_base64=image_base64, custom_question=custom_question)
                 if result:
-                    result_lower = result.lower()
-                    if result_lower.startswith("**verdict**: fake") or result_lower.startswith("verdict: fake"):
-                        st.error("⚠️ **VERDICT: FAKE**")
-                    elif result_lower.startswith("**verdict**: real") or result_lower.startswith("verdict: real"):
-                        st.success("✅ **VERDICT: REAL**")
-                    elif "uncertain" in result_lower[:200]:
-                        st.warning("⚠️ **VERDICT: UNCERTAIN**")
-                    else:
-                        # Fallback for old format
-                        is_fake = "fake" in result_lower[:200]
-                        if is_fake:
-                            st.error("⚠️ Likely Fake")
+                    # Only show verdict badges if it's an authenticity check (no custom question)
+                    if not custom_question or not custom_question.strip():
+                        result_lower = result.lower()
+                        if result_lower.startswith("**verdict**: fake") or result_lower.startswith("verdict: fake"):
+                            st.error("⚠️ **VERDICT: FAKE**")
+                        elif result_lower.startswith("**verdict**: real") or result_lower.startswith("verdict: real"):
+                            st.success("✅ **VERDICT: REAL**")
+                        elif "uncertain" in result_lower[:200]:
+                            st.warning("⚠️ **VERDICT: UNCERTAIN**")
                         else:
-                            st.success("✅ Likely Real")
+                            # Fallback for old format
+                            is_fake = "fake" in result_lower[:200]
+                            if is_fake:
+                                st.error("⚠️ Likely Fake")
+                            else:
+                                st.success("✅ Likely Real")
                     st.markdown("---")
                     st.markdown(result)
         except Exception as e:
